@@ -1,65 +1,170 @@
 
-package com.example.novaai;
+package com.novaai.app;
 
-import android.annotation.SuppressLint;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.net.Uri;
+import android.app.Activity;
 import android.os.Bundle;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.content.Intent;
 import android.view.View;
+import android.view.Gravity;
 import android.webkit.CookieManager;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import androidx.activity.OnBackPressedCallback;
-import androidx.appcompat.app.AppCompatActivity;
-
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity {
 
     private static final String APP_URL =
             "https://novaai-mndxi9nthpjva6diemhbvd.streamlit.app/";
 
+    private FrameLayout root;
     private WebView webView;
     private LinearLayout errorPanel;
     private TextView errorText;
+    private ProgressBar progressBar;
 
-    @SuppressLint("SetJavaScriptEnabled")
+    private boolean pageLoaded = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
 
-        webView = findViewById(R.id.webView);
-        errorPanel = findViewById(R.id.errorPanel);
-        errorText = findViewById(R.id.errorText);
-        Button retryButton = findViewById(R.id.retryButton);
+        getWindow().setStatusBarColor(Color.rgb(7, 10, 16));
+        getWindow().setNavigationBarColor(Color.rgb(7, 10, 16));
 
-        // Настройки WebView
+        createInterface();
+        configureWebView();
+
+        if (savedInstanceState == null) {
+            webView.loadUrl(APP_URL);
+        } else {
+            webView.restoreState(savedInstanceState);
+            if (webView.getUrl() == null) {
+                webView.loadUrl(APP_URL);
+            }
+        }
+    }
+
+    private void createInterface() {
+        root = new FrameLayout(this);
+        root.setBackgroundColor(Color.rgb(7, 10, 16));
+
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.rgb(7, 10, 16));
+
+        root.addView(webView, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        progressBar = new ProgressBar(this);
+        FrameLayout.LayoutParams progressParams =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        Gravity.CENTER
+                );
+
+        root.addView(progressBar, progressParams);
+
+        errorPanel = new LinearLayout(this);
+        errorPanel.setOrientation(LinearLayout.VERTICAL);
+        errorPanel.setGravity(Gravity.CENTER);
+        errorPanel.setPadding(28, 28, 28, 28);
+        errorPanel.setBackgroundColor(Color.rgb(7, 10, 16));
+        errorPanel.setVisibility(View.GONE);
+
+        TextView title = new TextView(this);
+        title.setText("NOVA AI");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(28);
+        title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setGravity(Gravity.CENTER);
+
+        errorText = new TextView(this);
+        errorText.setTextColor(Color.LTGRAY);
+        errorText.setTextSize(15);
+        errorText.setGravity(Gravity.CENTER);
+        errorText.setPadding(0, 20, 0, 24);
+        errorText.setText(
+                "Не удалось открыть NOVA AI.\nПроверь интернет."
+        );
+
+        Button retryButton = new Button(this);
+        retryButton.setText("Повторить");
+        retryButton.setTextColor(Color.WHITE);
+        retryButton.setAllCaps(false);
+
+        GradientDrawable buttonBackground = new GradientDrawable();
+        buttonBackground.setColor(Color.rgb(25, 75, 150));
+        buttonBackground.setCornerRadius(24);
+        retryButton.setBackground(buttonBackground);
+
+        retryButton.setOnClickListener(v -> {
+            errorPanel.setVisibility(View.GONE);
+            webView.setVisibility(View.VISIBLE);
+            progressBar.setVisibility(View.VISIBLE);
+            pageLoaded = false;
+            webView.loadUrl(APP_URL);
+        });
+
+        errorPanel.addView(title);
+        errorPanel.addView(errorText);
+
+        LinearLayout.LayoutParams buttonParams =
+                new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.WRAP_CONTENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                );
+
+        errorPanel.addView(retryButton, buttonParams);
+
+        root.addView(errorPanel, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+
+        setContentView(root);
+    }
+
+    private void configureWebView() {
         WebSettings settings = webView.getSettings();
+
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setLoadsImagesAutomatically(true);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setSupportMultipleWindows(false);
-        settings.setMixedContentMode(
-                WebSettings.MIXED_CONTENT_NEVER_ALLOW
-        );
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
-        // Cookies для авторизации и состояния сессии
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
         cookies.setAcceptThirdPartyCookies(webView, true);
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int progress) {
+                if (progress < 100 && !pageLoaded) {
+                    progressBar.setVisibility(View.VISIBLE);
+                } else {
+                    progressBar.setVisibility(View.GONE);
+                }
+            }
+        });
 
         webView.setWebViewClient(new WebViewClient() {
 
@@ -76,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
 
-                // Оставляем сайт и его поддомены внутри WebView
+                // Сайт Streamlit и его поддомены открываются в приложении.
                 if ("https".equalsIgnoreCase(scheme)
                         && (host.equalsIgnoreCase("streamlit.app")
                         || host.endsWith(".streamlit.app")
@@ -85,19 +190,16 @@ public class MainActivity extends AppCompatActivity {
                     return false;
                 }
 
-                // Внешние ссылки открываем в браузере
+                // Остальные HTTP(S)-ссылки открываем во внешнем браузере.
                 if ("https".equalsIgnoreCase(scheme)
                         || "http".equalsIgnoreCase(scheme)) {
                     try {
-                        startActivity(
-                                new Intent(Intent.ACTION_VIEW, uri)
-                        );
+                        startActivity(new Intent(
+                                Intent.ACTION_VIEW, uri
+                        ));
                     } catch (Exception e) {
-                        showError(
-                                "Не удалось открыть ссылку:\n" + uri
-                        );
+                        showError("Не удалось открыть внешнюю ссылку.");
                     }
-                    return true;
                 }
 
                 return true;
@@ -109,15 +211,19 @@ public class MainActivity extends AppCompatActivity {
                     String url,
                     Bitmap favicon
             ) {
+                pageLoaded = false;
                 errorPanel.setVisibility(View.GONE);
                 webView.setVisibility(View.VISIBLE);
+                progressBar.setVisibility(View.VISIBLE);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
+                pageLoaded = true;
+                progressBar.setVisibility(View.GONE);
                 errorPanel.setVisibility(View.GONE);
                 webView.setVisibility(View.VISIBLE);
-                cookies.flush();
+                CookieManager.getInstance().flush();
             }
 
             @Override
@@ -128,17 +234,16 @@ public class MainActivity extends AppCompatActivity {
             ) {
                 super.onReceivedError(view, request, error);
 
-                // Игнорируем ошибки отдельных картинок и скриптов.
                 if (request.isForMainFrame()) {
                     int code = error.getErrorCode();
                     String description =
                             error.getDescription().toString();
 
                     showError(
-                            "Не удалось загрузить NOVA AI.\n\n"
-                            + "Код ошибки: " + code + "\n"
-                            + "Причина: " + description + "\n\n"
-                            + "Проверь интернет и повтори попытку."
+                            "Не удалось загрузить сайт.\n\n"
+                            + "Код: " + code + "\n"
+                            + "Причина: " + description
+                            + "\n\nПроверь подключение к интернету."
                     );
                 }
             }
@@ -147,51 +252,24 @@ public class MainActivity extends AppCompatActivity {
             public void onReceivedHttpError(
                     WebView view,
                     WebResourceRequest request,
-                    android.webkit.WebResourceResponse response
+                    WebResourceResponse response
             ) {
                 super.onReceivedHttpError(view, request, response);
 
                 if (request.isForMainFrame()) {
                     showError(
-                            "Сервер вернул HTTP "
+                            "Ошибка сервера HTTP "
                             + response.getStatusCode()
-                            + ".\nПопробуй открыть сайт позже."
+                            + ".\nПопробуй повторить попытку позже."
                     );
                 }
             }
         });
-
-        // Повторная загрузка
-        retryButton.setOnClickListener(v -> {
-            errorPanel.setVisibility(View.GONE);
-            webView.setVisibility(View.VISIBLE);
-            webView.loadUrl(APP_URL);
-        });
-
-        // Кнопка «Назад»
-        getOnBackPressedDispatcher().addCallback(
-                this,
-                new OnBackPressedCallback(true) {
-                    @Override
-                    public void handleOnBackPressed() {
-                        if (webView.canGoBack()) {
-                            webView.goBack();
-                        } else {
-                            finish();
-                        }
-                    }
-                }
-        );
-
-        if (savedInstanceState == null) {
-            webView.loadUrl(APP_URL);
-        } else {
-            webView.restoreState(savedInstanceState);
-        }
     }
 
     private void showError(String message) {
         runOnUiThread(() -> {
+            progressBar.setVisibility(View.GONE);
             webView.setVisibility(View.GONE);
             errorPanel.setVisibility(View.VISIBLE);
             errorText.setText(message);
@@ -199,11 +277,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
     protected void onSaveInstanceState(Bundle outState) {
         if (webView != null) {
             webView.saveState(outState);
         }
-
         super.onSaveInstanceState(outState);
     }
 
@@ -212,9 +299,9 @@ public class MainActivity extends AppCompatActivity {
         if (webView != null) {
             webView.stopLoading();
             webView.setWebViewClient(null);
+            webView.setWebChromeClient(null);
             webView.destroy();
         }
-
         super.onDestroy();
     }
 }
